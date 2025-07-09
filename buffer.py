@@ -1,5 +1,4 @@
 import attridict
-import numpy as np
 import torch
 
 # Code comes from SimpleDreamer repo, I only changed some formatting and names, but I should really remake it.
@@ -9,11 +8,11 @@ class ReplayBuffer(object):
         self.device = device
         self.capacity = int(self.config.capacity)
 
-        self.observations        = np.empty((self.capacity, *observation_shape), dtype=np.float32)
-        self.nextObservations   = np.empty((self.capacity, *observation_shape), dtype=np.float32)
-        self.actions             = np.empty((self.capacity, actions_size), dtype=np.float32)
-        self.rewards             = np.empty((self.capacity, 1), dtype=np.float32)
-        self.dones               = np.empty((self.capacity, 1), dtype=np.float32)
+        self.observations        = torch.zeros((self.capacity, observation_shape), dtype=torch.float32, device=self.device)
+        self.nextObservations    = torch.zeros((self.capacity, observation_shape), dtype=torch.float32, device=self.device)
+        self.actions             = torch.zeros((self.capacity, actions_size), dtype=torch.float32, device=self.device)
+        self.rewards             = torch.zeros((self.capacity, 1), dtype=torch.float32, device=self.device)
+        self.dones               = torch.zeros((self.capacity, 1), dtype=torch.float32, device=self.device)
 
         self.bufferIndex = 0
         self.full = False
@@ -31,20 +30,50 @@ class ReplayBuffer(object):
         self.bufferIndex = (self.bufferIndex + 1) % self.capacity
         self.full = self.full or self.bufferIndex == 0
 
+    def batch_add(self, observations, actions, rewards, nextObservations, dones):
+        batchSize = len(observations)
+        assert batchSize <= self.capacity, "batch size is larger than the buffer capacity"
+        
+        # add whole batch to the buffer
+        endIndex = self.bufferIndex + batchSize
+        if endIndex <= self.capacity:
+            self.observations[self.bufferIndex:endIndex]     = observations
+            self.actions[self.bufferIndex:endIndex]          = actions
+            self.rewards[self.bufferIndex:endIndex]          = rewards.unsqueeze(-1)
+            self.nextObservations[self.bufferIndex:endIndex] = nextObservations
+            self.dones[self.bufferIndex:endIndex]            = dones.unsqueeze(-1)
+        else:
+            firstPartSize = self.capacity - self.bufferIndex
+            secondPartSize = batchSize - firstPartSize
+            
+            self.observations[self.bufferIndex:]     = observations[:firstPartSize]
+            self.actions[self.bufferIndex:]          = actions[:firstPartSize]
+            self.rewards[self.bufferIndex:]          = rewards[:firstPartSize].unsqueeze(-1)
+            self.nextObservations[self.bufferIndex:] = nextObservations[:firstPartSize]
+            self.dones[self.bufferIndex:]            = dones[:firstPartSize].unsqueeze(-1)
+
+            self.observations[:secondPartSize]     = observations[firstPartSize:]
+            self.actions[:secondPartSize]          = actions[firstPartSize:]
+            self.rewards[:secondPartSize]          = rewards[firstPartSize:].unsqueeze(-1)
+            self.nextObservations[:secondPartSize] = nextObservations[firstPartSize:]
+            self.dones[:secondPartSize]            = dones[firstPartSize:].unsqueeze(-1)
+
+        self.bufferIndex = (self.bufferIndex + batchSize) % self.capacity
+        self.full = self.full or self.bufferIndex == 0
+
     def sample(self, batchSize, sequenceSize):
         lastFilledIndex = self.bufferIndex - sequenceSize + 1
         assert self.full or (lastFilledIndex > batchSize), "not enough data in the buffer to sample"
-        sampleIndex = np.random.randint(0, self.capacity if self.full else lastFilledIndex, batchSize).reshape(-1, 1)
-        sequenceLength = np.arange(sequenceSize).reshape(1, -1)
+        sampleIndex = torch.randint(0, self.capacity if self.full else lastFilledIndex, (batchSize, 1), device=self.device)
+        sequenceLength = torch.arange(sequenceSize, device=self.device).reshape(1, -1)
 
         sampleIndex = (sampleIndex + sequenceLength) % self.capacity
 
-        observations         = torch.as_tensor(self.observations[sampleIndex], device=self.device).float()
-        nextObservations    = torch.as_tensor(self.nextObservations[sampleIndex], device=self.device).float()
-
-        actions  = torch.as_tensor(self.actions[sampleIndex], device=self.device)
-        rewards  = torch.as_tensor(self.rewards[sampleIndex], device=self.device)
-        dones    = torch.as_tensor(self.dones[sampleIndex], device=self.device)
+        observations     = self.observations[sampleIndex]
+        nextObservations = self.nextObservations[sampleIndex]
+        actions          = self.actions[sampleIndex]
+        rewards          = self.rewards[sampleIndex]
+        dones            = self.dones[sampleIndex]
 
         sample = attridict({
             "observations"      : observations,

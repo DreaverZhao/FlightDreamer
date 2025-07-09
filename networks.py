@@ -100,6 +100,16 @@ class EncoderConv(nn.Module):
 
     def forward(self, x):
         return self.convolutionalNet(x).view(-1, self.outputSize)
+    
+class EncoderMLP(nn.Module):
+    def __init__(self, inputSize, outputSize, config):
+        super().__init__()
+        self.config = config
+        self.outputSize = outputSize
+        self.network = sequentialModel1D(inputSize, [self.config.hiddenSize]*self.config.numLayers, outputSize, self.config.activation)
+
+    def forward(self, x):
+        return self.network(x).view(-1, self.outputSize)
 
 
 class DecoderConv(nn.Module):
@@ -120,6 +130,16 @@ class DecoderConv(nn.Module):
 
     def forward(self, x):
         return self.network(x)
+    
+class DecoderMLP(nn.Module):
+    def __init__(self, inputSize, outputSize, config):
+        super().__init__()
+        self.config = config
+        self.outputSize = outputSize
+        self.network = sequentialModel1D(inputSize, [self.config.hiddenSize]*self.config.numLayers, outputSize, self.config.activation)
+
+    def forward(self, x):
+        return self.network(x).view(-1, self.outputSize)
 
 
 class Actor(nn.Module):
@@ -128,8 +148,8 @@ class Actor(nn.Module):
         actionSize *= 2
         self.config = config
         self.network = sequentialModel1D(inputSize, [self.config.hiddenSize]*self.config.numLayers, actionSize, self.config.activation)
-        self.register_buffer("actionScale", ((torch.tensor(actionHigh, device=device) - torch.tensor(actionLow, device=device)) / 2.0))
-        self.register_buffer("actionBias", ((torch.tensor(actionHigh, device=device) + torch.tensor(actionLow, device=device)) / 2.0))
+        self.register_buffer("actionScale", ((actionHigh.clone().detach() - actionLow.clone().detach()) / 2.0))
+        self.register_buffer("actionBias", ((actionHigh.clone().detach() + actionLow.clone().detach()) / 2.0))
 
     def forward(self, x, training=False):
         logStdMin, logStdMax = -5, 2

@@ -1,5 +1,16 @@
 import gymnasium as gym
 import numpy as np
+import torch
+
+def getVecEnvProperties(env):
+    assert isinstance(env.action_space, gym.spaces.Box), "Sorry, supporting only continuous action space for now"
+    observationShape = env.observation_space.shape[1]
+    actionSize = env.action_space.shape[1]
+    # actionLow = env.action_space.low.tolist()[0]
+    # actionHigh = env.action_space.high.tolist()[0]
+    actionLow = torch.ones(actionSize, dtype=torch.float32) * -10
+    actionHigh = torch.ones(actionSize, dtype=torch.float32) * 10
+    return observationShape, actionSize, actionLow, actionHigh
 
 def getEnvProperties(env):
     assert isinstance(env.action_space, gym.spaces.Box), "Sorry, supporting only continuous action space for now"
@@ -32,3 +43,16 @@ class CleanGymWrapper(gym.Wrapper):
     def reset(self, seed=None):
         obs, info = self.env.reset(seed=seed)
         return obs
+    
+class IsaacGymWrapper(gym.Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        done = torch.bitwise_or(terminated, truncated)
+        return obs["policy"], reward, done
+
+    def reset(self, seed=None):
+        obs, info = self.env.reset(seed=seed)
+        return obs["policy"]
