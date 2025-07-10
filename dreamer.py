@@ -6,9 +6,7 @@ import os
 from networks import RecurrentModel, PriorNet, PosteriorNet, RewardModel, ContinueModel, EncoderConv, EncoderMLP, DecoderConv, DecoderMLP, Actor, Critic
 from utils import computeLambdaValues, Moments
 from buffer import ReplayBuffer
-import imageio
 
-from time import time
 
 class Dreamer:
     def __init__(self, observationShape, actionSize, actionLow, actionHigh, device, config):
@@ -52,9 +50,9 @@ class Dreamer:
 
 
     def worldModelTraining(self, data):
-        encodedObservations = self.encoder(data.observations).view(self.config.batchSize, self.config.batchLength, -1)
-        previousRecurrentState  = torch.zeros(self.config.batchSize, self.recurrentSize,    device=self.device)
-        previousLatentState     = torch.zeros(self.config.batchSize, self.latentSize,       device=self.device)
+        encodedObservations    = self.encoder(data.observations).view(self.config.batchSize, self.config.batchLength, -1)
+        previousRecurrentState = torch.zeros(self.config.batchSize, self.recurrentSize, device=self.device)
+        previousLatentState    = torch.zeros(self.config.batchSize, self.latentSize,    device=self.device)
 
         recurrentStates, priorsLogits, posteriors, posteriorsLogits = [], [], [], []
         for t in range(1, self.config.batchLength):

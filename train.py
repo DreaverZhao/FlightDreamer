@@ -47,6 +47,8 @@ import flipper.tasks  # noqa: F401
 import torch
 import attridict
 from tqdm import tqdm
+from colorama import Fore, Style
+from tensorboardX import SummaryWriter
 
 from dreamer    import Dreamer
 from utils      import loadConfig, seedEverything, plotMetrics
@@ -85,18 +87,19 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env = IsaacGymWrapper(gym.make(args_cli.task, cfg=env_cfg))
 
     observationShape, actionSize, actionLow, actionHigh = getVecEnvProperties(env)
-    print(f"envProperties: obs {observationShape}, action size {actionSize}, actionLow {actionLow}, actionHigh {actionHigh}")
-    print(f"Using device: {env_cfg.sim.device}")
+    print(Fore.GREEN + f"envProperties: obs {observationShape}, action size {actionSize}, actionLow {actionLow}, actionHigh {actionHigh}" + Style.RESET_ALL)
+    print(Fore.GREEN + f"Using device: {env_cfg.sim.device}" + Style.RESET_ALL)
     dreamer = Dreamer(observationShape, actionSize, actionLow, actionHigh, env_cfg.sim.device, config.dreamer)
     if config.resume:
         dreamer.loadCheckpoint(checkpointToLoad)
 
-    print("Warm starting...")
+    print(Fore.BLUE + "Warm starting..." + Style.RESET_ALL)
     dreamer.environmentInteraction(env, config.episodesBeforeStart, seed=config.seed)
 
     iterationsNum = config.gradientSteps // config.replayRatio
-    print(f"Training for {iterationsNum} iterations, {config.replayRatio} replay iterations per iteration, total gradient steps: {config.gradientSteps}")
+    print(Fore.BLUE + f"Training for {iterationsNum} iterations, {config.replayRatio} replay iterations per iteration, total gradient steps: {config.gradientSteps}" + Style.RESET_ALL)
     pbar = tqdm(total=iterationsNum, unit="iteration")
+    logger = SummaryWriter(log_dir=f"logs/dreamer/logs/{runName}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
     for _ in range(iterationsNum):
         pbar.update(1)
         for r in range(config.replayRatio):
@@ -115,6 +118,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             metricsBase = {"envSteps": dreamer.totalEnvSteps, "gradientSteps": dreamer.totalGradientSteps, "totalReward" : mostRecentScore}
             saveLossesToCSV(metricsFilename, metricsBase | worldModelMetrics | behaviorMetrics)
             plotMetrics(f"{metricsFilename}", savePath=f"{plotFilename}", title=f"{args_cli.task}")
+        for key, value in worldModelMetrics.items():
+            logger.add_scalar(f"worldModel/{key}", value, dreamer.totalGradientSteps)
+        for key, value in behaviorMetrics.items():
+            logger.add_scalar(f"behavior/{key}", value, dreamer.totalGradientSteps)
+        logger.add_scalar("env/score", mostRecentScore.mean().item(), dreamer.totalGradientSteps)
 
 
 if __name__ == "__main__":

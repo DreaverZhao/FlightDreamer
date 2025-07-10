@@ -58,8 +58,8 @@ class ReplayBuffer(object):
             self.nextObservations[:secondPartSize] = nextObservations[firstPartSize:]
             self.dones[:secondPartSize]            = dones[firstPartSize:].unsqueeze(-1)
 
+        self.full = self.full or self.bufferIndex + batchSize >= self.capacity
         self.bufferIndex = (self.bufferIndex + batchSize) % self.capacity
-        self.full = self.full or self.bufferIndex == 0
 
     def sample(self, batchSize, sequenceSize):
         lastFilledIndex = self.bufferIndex - sequenceSize + 1
