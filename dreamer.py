@@ -9,7 +9,8 @@ from buffer import ReplayBuffer
 
 
 class Dreamer:
-    def __init__(self, observationShape, actionSize, actionLow, actionHigh, device, config):
+    def __init__(self, num_envs, observationShape, actionSize, actionLow, actionHigh, device, config):
+        self.num_envs           = num_envs
         self.observationShape   = observationShape
         self.actionSize         = actionSize
         self.config             = config
@@ -32,7 +33,7 @@ class Dreamer:
         if config.useContinuationPrediction:
             self.continuePredictor  = ContinueModel(self.fullStateSize,                                                              config.continuation   ).to(self.device)
 
-        self.buffer         = ReplayBuffer(observationShape, actionSize, config.buffer, device)
+        self.buffer         = ReplayBuffer(num_envs, observationShape, actionSize, config.buffer, device)
         self.valueMoments   = Moments(device)
 
         self.worldModelParameters = (list(self.encoder.parameters()) + list(self.decoder.parameters()) + list(self.recurrentModel.parameters()) +
@@ -47,6 +48,8 @@ class Dreamer:
         self.totalEpisodes      = 0
         self.totalEnvSteps      = 0
         self.totalGradientSteps = 0
+
+        self.last_observation = None
 
 
     def worldModelTraining(self, data):
@@ -168,13 +171,16 @@ class Dreamer:
     def environmentInteraction(self, env, numEpisodes, seed=None, evaluation=False):
         num_envs = env.unwrapped.num_envs if hasattr(env.unwrapped, 'num_envs') else 1
         scores = torch.zeros(num_envs, dtype=torch.float32, device=self.device)
-        # for i in range(numEpisodes):
+
         episodesCount = 0
         recurrentState, latentState = torch.zeros(num_envs, self.recurrentSize, device=self.device), torch.zeros(num_envs, self.latentSize, device=self.device)
         action = torch.zeros(num_envs, self.actionSize).to(self.device)
 
         # observation = env.reset(seed= (seed + self.totalEpisodes if seed else None))
-        observation = env.reset()
+        if self.last_observation is not None:
+            observation = self.last_observation
+        else:
+            observation = env.reset()
         encodedObservation = self.encoder(observation)
         while episodesCount < numEpisodes * num_envs:
             recurrentState      = self.recurrentModel(recurrentState, latentState, action)
@@ -182,7 +188,7 @@ class Dreamer:
             action              = self.actor(torch.cat((recurrentState, latentState), -1))
             nextObservation, reward, done = env.step(action)
             if not evaluation:
-                self.buffer.batch_add(observation, action, reward, nextObservation, done)
+                self.buffer.add(observation, action, reward, nextObservation, done)
             encodedObservation = self.encoder(nextObservation)
             observation = nextObservation
 
@@ -191,6 +197,8 @@ class Dreamer:
             if not evaluation:
                 self.totalEnvSteps += num_envs
                 self.totalEpisodes += done.sum().item()
+
+        self.last_observation = nextObservation
 
         return torch.sum(scores)/episodesCount if numEpisodes else None
     

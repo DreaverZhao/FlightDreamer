@@ -87,17 +87,17 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env = IsaacGymWrapper(gym.make(args_cli.task, cfg=env_cfg))
 
     observationShape, actionSize, actionLow, actionHigh = getVecEnvProperties(env)
-    print(Fore.GREEN + f"envProperties: obs {observationShape}, action size {actionSize}, actionLow {actionLow}, actionHigh {actionHigh}" + Style.RESET_ALL)
-    print(Fore.GREEN + f"Using device: {env_cfg.sim.device}" + Style.RESET_ALL)
-    dreamer = Dreamer(observationShape, actionSize, actionLow, actionHigh, env_cfg.sim.device, config.dreamer)
+    print(Fore.GREEN + f"[FlightDreamer]envProperties: obs {observationShape}, action size {actionSize}, actionLow {actionLow}, actionHigh {actionHigh}" + Style.RESET_ALL)
+    print(Fore.GREEN + f"[FlightDreamer]Using device: {env_cfg.sim.device}" + Style.RESET_ALL)
+    dreamer = Dreamer(env_cfg.scene.num_envs, observationShape, actionSize, actionLow, actionHigh, env_cfg.sim.device, config.dreamer)
     if config.resume:
         dreamer.loadCheckpoint(checkpointToLoad)
 
-    print(Fore.BLUE + "Warm starting..." + Style.RESET_ALL)
+    print(Fore.BLUE + "[FlightDreamer]Warm starting..." + Style.RESET_ALL)
     dreamer.environmentInteraction(env, config.episodesBeforeStart, seed=config.seed)
 
     iterationsNum = config.gradientSteps // config.replayRatio
-    print(Fore.BLUE + f"Training for {iterationsNum} iterations, {config.replayRatio} replay iterations per iteration, total gradient steps: {config.gradientSteps}" + Style.RESET_ALL)
+    print(Fore.BLUE + f"[FlightDreamer]Training for {iterationsNum} iterations, {config.replayRatio} replay iterations per iteration, total gradient steps: {config.gradientSteps}" + Style.RESET_ALL)
     pbar = tqdm(total=iterationsNum, unit="iteration")
     logger = SummaryWriter(log_dir=f"logs/dreamer/logs/{runName}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
     for _ in range(iterationsNum):
@@ -114,15 +114,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             pbar.set_description(f"Replay iteration {r + 1}/{config.replayRatio}")
         pbar.set_description("Collecting data...")
         mostRecentScore = dreamer.environmentInteraction(env, config.numInteractionEpisodes, seed=config.seed)
-        if config.saveMetrics:
-            metricsBase = {"envSteps": dreamer.totalEnvSteps, "gradientSteps": dreamer.totalGradientSteps, "totalReward" : mostRecentScore}
-            saveLossesToCSV(metricsFilename, metricsBase | worldModelMetrics | behaviorMetrics)
-            plotMetrics(f"{metricsFilename}", savePath=f"{plotFilename}", title=f"{args_cli.task}")
         for key, value in worldModelMetrics.items():
             logger.add_scalar(f"worldModel/{key}", value, dreamer.totalGradientSteps)
         for key, value in behaviorMetrics.items():
             logger.add_scalar(f"behavior/{key}", value, dreamer.totalGradientSteps)
-        logger.add_scalar("env/score", mostRecentScore.mean().item(), dreamer.totalGradientSteps)
+        logger.add_scalar("env/episodic_reward", mostRecentScore.mean().item(), dreamer.totalGradientSteps)
 
 
 if __name__ == "__main__":

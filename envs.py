@@ -8,8 +8,8 @@ def getVecEnvProperties(env):
     actionSize = env.action_space.shape[1]
     # actionLow = env.action_space.low.tolist()[0]
     # actionHigh = env.action_space.high.tolist()[0]
-    actionLow = torch.ones(actionSize, dtype=torch.float32) * -10
-    actionHigh = torch.ones(actionSize, dtype=torch.float32) * 10
+    actionLow = torch.ones(actionSize, dtype=torch.float32) * -1
+    actionHigh = torch.ones(actionSize, dtype=torch.float32) * 1
     return observationShape, actionSize, actionLow, actionHigh
 
 def getEnvProperties(env):
