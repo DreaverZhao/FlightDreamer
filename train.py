@@ -50,10 +50,10 @@ from tqdm import tqdm
 from colorama import Fore, Style
 from tensorboardX import SummaryWriter
 
-from dreamer    import Dreamer
-from utils      import loadConfig, seedEverything, plotMetrics
-from envs       import getVecEnvProperties, IsaacGymWrapper
-from utils      import saveLossesToCSV, ensureParentFolders
+from dreamer import Dreamer
+from utils import loadConfig, seedEverything, plotMetrics
+from envs import getVecEnvProperties, IsaacGymWrapper
+from utils import saveLossesToCSV, ensureParentFolders
 
 # config shortcuts
 agent_cfg_entry_point = "dreamer_cfg_entry_point"
@@ -65,7 +65,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # override configurations with non-hydra CLI arguments
     env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
     env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
-    
+
     # set the agent and environment seed from command line
     # note: certain randomization occur in the environment initialization so we set the seed here
     agent_cfg["seed"] = args_cli.seed if args_cli.seed is not None else agent_cfg["seed"]
@@ -74,6 +74,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # load config for dreamer
     config = attridict(agent_cfg)
     seedEverything(config.seed)
+
+    if args_cli.checkpoint is not None:
+        config.resume = True
+        config.checkpointToLoad = args_cli.checkpoint
+        print(Fore.YELLOW + f"[FlightDreamer] Resuming from checkpoint: {config.checkpointToLoad}" + Style.RESET_ALL)
 
     runName                 = f"{args_cli.task}_{config.runName}"
     checkpointToLoad        = os.path.join(config.folderNames.checkpointsFolder, f"{runName}_{config.checkpointToLoad}")
@@ -87,17 +92,17 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env = IsaacGymWrapper(gym.make(args_cli.task, cfg=env_cfg))
 
     observationShape, actionSize, actionLow, actionHigh = getVecEnvProperties(env)
-    print(Fore.GREEN + f"[FlightDreamer]envProperties: obs {observationShape}, action size {actionSize}, actionLow {actionLow}, actionHigh {actionHigh}" + Style.RESET_ALL)
-    print(Fore.GREEN + f"[FlightDreamer]Using device: {env_cfg.sim.device}" + Style.RESET_ALL)
+    print(Fore.GREEN + f"[FlightDreamer] envProperties: obs {observationShape}, action size {actionSize}, actionLow {actionLow}, actionHigh {actionHigh}" + Style.RESET_ALL)
+    print(Fore.GREEN + f"[FlightDreamer] Using device: {env_cfg.sim.device}" + Style.RESET_ALL)
     dreamer = Dreamer(env_cfg.scene.num_envs, observationShape, actionSize, actionLow, actionHigh, env_cfg.sim.device, config.dreamer)
     if config.resume:
         dreamer.loadCheckpoint(checkpointToLoad)
 
-    print(Fore.BLUE + "[FlightDreamer]Warm starting..." + Style.RESET_ALL)
+    print(Fore.BLUE + "[FlightDreamer] Warm starting..." + Style.RESET_ALL)
     dreamer.environmentInteraction(env, config.episodesBeforeStart, seed=config.seed)
 
     iterationsNum = config.gradientSteps // config.replayRatio
-    print(Fore.BLUE + f"[FlightDreamer]Training for {iterationsNum} iterations, {config.replayRatio} replay iterations per iteration, total gradient steps: {config.gradientSteps}" + Style.RESET_ALL)
+    print(Fore.BLUE + f"[FlightDreamer] Training for {iterationsNum} iterations, {config.replayRatio} replay iterations per iteration, total gradient steps: {config.gradientSteps}" + Style.RESET_ALL)
     pbar = tqdm(total=iterationsNum, unit="iteration")
     logger = SummaryWriter(log_dir=f"logs/dreamer/logs/{runName}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
     for _ in range(iterationsNum):
