@@ -27,41 +27,33 @@ simulation_app = app_launcher.app
 
 import gymnasium as gym
 import os
-import random
 import signal
 import sys
-from datetime import datetime
 
 from isaaclab.envs import (
     DirectMARLEnvCfg,
     DirectRLEnvCfg,
     ManagerBasedRLEnvCfg,
 )
-from isaaclab.utils.assets import retrieve_file_path
-from isaaclab.utils.dict import print_dict
-from isaaclab.utils.io import dump_pickle, dump_yaml
 
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 import flipper.tasks  # noqa: F401
 
-import torch
 import attridict
-from tqdm import tqdm
 from colorama import Fore, Style
-from tensorboardX import SummaryWriter
 
-from dreamer    import Dreamer
-from utils      import loadConfig, seedEverything, plotMetrics
-from envs       import getVecEnvProperties, IsaacGymWrapper
-from utils      import saveLossesToCSV, ensureParentFolders
+from dreamer import Dreamer
+from utils import seedEverything
+from envs import getVecEnvProperties, IsaacGymWrapper
 
 # config shortcuts
 agent_cfg_entry_point = "dreamer_cfg_entry_point"
 
 # Global flag for graceful shutdown
 interrupt_received = False
+
 
 def signal_handler(signum, frame):
     """Handle keyboard interrupt (Ctrl+C) gracefully."""
@@ -94,7 +86,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         checkpoints.sort(key=lambda t: os.path.getmtime(os.path.join(checkpoints_folder, t)), reverse=True)
         args_cli.checkpoint = os.path.join(checkpoints_folder, checkpoints[0])
     checkpointToLoad = args_cli.checkpoint
-    
+
     # set the agent and environment seed from command line
     # note: certain randomization occur in the environment initialization so we set the seed here
     agent_cfg["seed"] = args_cli.seed if args_cli.seed is not None else agent_cfg["seed"]
@@ -103,7 +95,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # load config for dreamer
     config = attridict(agent_cfg)
     seedEverything(config.seed)
-    
+
     # create isaac environment
     env = IsaacGymWrapper(gym.make(args_cli.task, cfg=env_cfg))
 
@@ -120,7 +112,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     print(Fore.BLUE + "[FlightDreamer] Start evaluating, press Ctrl+C to stop..." + Style.RESET_ALL)
     # register signal handler for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
-    
+
     while not interrupt_received:
         dreamer.environmentInteraction(env, 1, seed=config.seed, evaluation=True)
 

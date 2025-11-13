@@ -27,7 +27,6 @@ simulation_app = app_launcher.app
 
 import gymnasium as gym
 import os
-import random
 from datetime import datetime
 
 from isaaclab.envs import (
@@ -35,25 +34,21 @@ from isaaclab.envs import (
     DirectRLEnvCfg,
     ManagerBasedRLEnvCfg,
 )
-from isaaclab.utils.assets import retrieve_file_path
-from isaaclab.utils.dict import print_dict
-from isaaclab.utils.io import dump_pickle, dump_yaml
 
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 import flipper.tasks  # noqa: F401
 
-import torch
 import attridict
 from tqdm import tqdm
 from colorama import Fore, Style
 from tensorboardX import SummaryWriter
 
 from dreamer import Dreamer
-from utils import loadConfig, seedEverything, plotMetrics
+from utils import seedEverything
 from envs import getVecEnvProperties, IsaacGymWrapper
-from utils import saveLossesToCSV, ensureParentFolders
+from utils import ensureParentFolders
 
 # config shortcuts
 agent_cfg_entry_point = "dreamer_cfg_entry_point"
@@ -80,14 +75,14 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         config.checkpointToLoad = args_cli.checkpoint
         print(Fore.YELLOW + f"[FlightDreamer] Resuming from checkpoint: {config.checkpointToLoad}" + Style.RESET_ALL)
 
-    runName                 = f"{args_cli.task}_{config.runName}"
-    checkpointToLoad        = os.path.join(config.folderNames.checkpointsFolder, f"{runName}_{config.checkpointToLoad}")
-    metricsFilename         = os.path.join(config.folderNames.metricsFolder,        runName)
-    plotFilename            = os.path.join(config.folderNames.plotsFolder,          runName)
-    checkpointFilenameBase  = os.path.join(config.folderNames.checkpointsFolder,    runName)
-    videoFilenameBase       = os.path.join(config.folderNames.videosFolder,         runName)
+    runName = f"{args_cli.task}_{config.runName}"
+    checkpointToLoad = os.path.join(config.folderNames.checkpointsFolder, f"{runName}_{config.checkpointToLoad}")
+    metricsFilename = os.path.join(config.folderNames.metricsFolder, runName)
+    plotFilename = os.path.join(config.folderNames.plotsFolder, runName)
+    checkpointFilenameBase = os.path.join(config.folderNames.checkpointsFolder, runName)
+    videoFilenameBase = os.path.join(config.folderNames.videosFolder, runName)
     ensureParentFolders(metricsFilename, plotFilename, checkpointFilenameBase, videoFilenameBase)
-    
+
     # create isaac environment
     env = IsaacGymWrapper(gym.make(args_cli.task, cfg=env_cfg))
 
@@ -108,9 +103,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     for _ in range(iterationsNum):
         pbar.update(1)
         for r in range(config.replayRatio):
-            sampledData                         = dreamer.buffer.sample(dreamer.config.batchSize, dreamer.config.batchLength)
-            initialStates, worldModelMetrics    = dreamer.worldModelTraining(sampledData)
-            behaviorMetrics                     = dreamer.behaviorTraining(initialStates)
+            sampledData = dreamer.buffer.sample(dreamer.config.batchSize, dreamer.config.batchLength)
+            initialStates, worldModelMetrics = dreamer.worldModelTraining(sampledData)
+            behaviorMetrics = dreamer.behaviorTraining(initialStates)
             dreamer.totalGradientSteps += 1
 
             if dreamer.totalGradientSteps % config.checkpointInterval == 0 and config.saveCheckpoints:
@@ -124,6 +119,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         for key, value in behaviorMetrics.items():
             logger.add_scalar(f"behavior/{key}", value, dreamer.totalGradientSteps)
         logger.add_scalar("env/episodic_reward", mostRecentScore.mean().item(), dreamer.totalGradientSteps)
+
+    env.close()
 
 
 if __name__ == "__main__":
